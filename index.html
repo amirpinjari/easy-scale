@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>System Design — an interactive course</title>
+    <meta name="description" content="An interactive system design course: each idea is an animated diagram you step through." />
+    <meta name="theme-color" content="#f7f5fc" />
+
+    <!-- icon + link previews -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="System Design — an interactive course" />
+    <meta property="og:description" content="Animated, step-through diagrams for load balancing, caching, sharding, queues, consensus and whole-system designs." />
+    <meta name="twitter:card" content="summary" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="theme.css" />
+    <script>
+      try {
+        if (localStorage.getItem('sd:theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+        var f = localStorage.getItem('sd:font');
+        if (f === 'mono' || f === 'serif') document.documentElement.dataset.font = f;
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript><p style="font-family: system-ui, sans-serif; padding: 40px">This course needs JavaScript.</p></noscript>
+    <script src="lessons2.js"></script>
+    <script src="lessons.js"></script>
+    <script src="engine.js"></script>
+    <script src="aws-lab.js"></script>
+    <script src="views.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
