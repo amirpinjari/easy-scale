@@ -1,19 +1,7 @@
 /* ==========================================================================
-   Premium theme layer — loaded after styles.css, overrides tokens + adds motion.
-   Delete this file's <link> in index.html to get the original look back.
+   Premium skin — loaded after styles.css, overrides tokens + adds motion.
+   The ✦ button in the top bar turns it on/off (Classic = styles.css alone).
    ========================================================================== */
-
-/* ---------- type: three switchable families (Aa button in the top bar) ---------- */
-:root {
-  --font-sans: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Space Grotesk", "Plus Jakarta Sans", system-ui, sans-serif;
-  --font-serif: "Fraunces", "Iowan Old Style", Georgia, serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font: var(--font-sans);
-  --font-head: var(--font-display);
-}
-:root[data-font="mono"] { --font: var(--font-mono); --font-head: var(--font-mono); }
-:root[data-font="serif"] { --font: var(--font-sans); --font-head: var(--font-serif); }
 
 /* ---------- pop palette: light ---------- */
 :root {
@@ -111,7 +99,6 @@ body {
     var(--paper);
 }
 ::selection { background: var(--pop-1); color: #fff; }
-kbd, .metric b, .qkey, .cs-table td, .bom__table td, code, pre { font-family: var(--font-mono); }
 
 /* headings get the display face */
 .lesson-head .title, .page__head .title, .guide h2, .qcard h2, .qdone h2,
@@ -172,7 +159,6 @@ kbd, .metric b, .qkey, .cs-table td, .bom__table td, code, pre { font-family: va
 .search:hover, .icon-btn:hover { box-shadow: var(--glow); border-color: var(--pop-1); transform: translateY(-1px); }
 .icon-btn svg { transition: transform .5s var(--ease); }
 #theme-btn:hover svg { transform: rotate(40deg); }
-#font-btn { font-family: var(--font-head); font-weight: 700; font-size: 14px; min-width: 34px; }
 
 /* ---------- cards: soft depth, lift on hover ---------- */
 .card {
@@ -319,3 +305,8 @@ input[type=range] { accent-color: var(--pop-1); }
 .prov__tab small { background: var(--grad); color: #fff; }
 .soon__hero h2 { font-family: var(--font-head); background: linear-gradient(100deg, var(--ink), var(--c) 70%); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .soon__table tbody tr:nth-child(n) { animation-delay: calc(var(--i, 0) * 30ms); }
+
+/* pads: slowly marching dots in the premium skin */
+.pad { stroke: color-mix(in srgb, var(--pop-1) 45%, var(--line-strong)); animation: pad-march 3.2s linear infinite; }
+.pad--down { stroke: var(--red-2); animation-duration: 1.2s; }
+@keyframes pad-march { to { stroke-dashoffset: -28; } }

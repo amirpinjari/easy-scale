@@ -4,6 +4,7 @@
   const NS = 'http://www.w3.org/2000/svg';
   const S = 34; // px per grid unit
   const COS = 0.866;
+  const REDUCED = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const LINK_Z = 0.05; // links and travelling dots share this height, so dots ride on the line
   const P = (x, y, z = 0) => [(x - y) * COS * S, (x + y) * 0.5 * S - z * S];
 
@@ -17,7 +18,80 @@
   const shade = (c, pct) => `fill: color-mix(in srgb, ${c} ${100 - pct}%, var(--ink) ${pct}%)`;
 
   // ---------- shapes (drawn around local origin 0,0) ----------
+  // rounded rectangle in the ground plane, as a closed loop of grid points
+  function rrect(x0, y0, x1, y1, r, n = 8) {
+    r = Math.min(r, (x1 - x0) / 2, (y1 - y0) / 2);
+    const out = [];
+    for (const [cx, cy, a0] of [[x1 - r, y0 + r, -90], [x1 - r, y1 - r, 0], [x0 + r, y1 - r, 90], [x0 + r, y0 + r, 180]]) {
+      for (let i = 0; i <= n; i++) {
+        const a = ((a0 + (90 * i) / n) * Math.PI) / 180;
+        out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+      }
+    }
+    return out;
+  }
+  const mix = (c, pct) => `color-mix(in srgb, ${c} ${100 - pct}%, var(--ink) ${pct}%)`;
+
+  // a slab with rounded corners: shaded curved walls + rounded top
+  function roundBox(g, w, d, h, color, r, opts = {}) {
+    const x0 = -w / 2, x1 = w / 2, y0 = -d / 2, y1 = d / 2;
+    const loop = rrect(x0, y0, x1, y1, r);
+    const n = loop.length;
+    const ptsAt = (arr, z) => pts(arr.map(([x, y]) => P(x, y, z)));
+    el('polygon', { points: ptsAt(rrect(x0 + 0.2, y0 + 0.2, x1 + 0.35, y1 + 0.35, r), 0), style: 'fill: var(--line); opacity:.7' }, g);
+    // walls: every edge facing the viewer, shaded by which way it faces
+    for (let i = 0; i < n; i++) {
+      const a = loop[i], b = loop[(i + 1) % n];
+      const nx = b[1] - a[1], ny = a[0] - b[0]; // outward normal
+      if (nx + ny <= 0) continue;
+      const c = mix(color, Math.round(12 + 12 * (nx / (Math.abs(nx) + Math.abs(ny) || 1))));
+      el('polygon', { points: pts([P(a[0], a[1], 0), P(b[0], b[1], 0), P(b[0], b[1], h), P(a[0], a[1], h)]), style: `fill:${c}; stroke:${c}`, 'stroke-width': 0.6 }, g);
+    }
+    // outline: bottom front curve + two silhouette edges
+    const sx = loop.map(([x, y]) => P(x, y)[0]);
+    const li = sx.indexOf(Math.min(...sx)), ri = sx.indexOf(Math.max(...sx));
+    const chain = (from, to, dir) => { const out = []; for (let i = from; ; i = (i + dir + n) % n) { out.push(loop[i]); if (i === to) break; } return out; };
+    const fwd = chain(li, ri, 1), back = chain(li, ri, -1);
+    const lowY = (c) => c.reduce((acc, [x, y]) => acc + P(x, y)[1], 0) / c.length;
+    const front = lowY(fwd) > lowY(back) ? fwd : back;
+    const line = { fill: 'none', stroke: 'var(--edge)', 'stroke-width': 1.4, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' };
+    el('polyline', { points: ptsAt(front, 0), ...line }, g);
+    for (const i of [li, ri]) el('line', { x1: P(...loop[i], 0)[0], y1: P(...loop[i], 0)[1], x2: P(...loop[i], h)[0], y2: P(...loop[i], h)[1], ...line }, g);
+    // server slots + status LEDs on the front-left face (inside the straight part)
+    if (opts.slots) {
+      const ra = Math.min(r, w / 2, d / 2);
+      for (let i = 1; i <= opts.slots; i++) {
+        const z = (h * i) / (opts.slots + 1);
+        const a = P(x0 + ra + 0.05, y1, z), b = P(x1 - ra - 0.05, y1, z);
+        el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: 'var(--edge)', 'stroke-width': 1.2, 'stroke-linecap': 'round', opacity: 0.6 }, g);
+        const led = P(x1 - ra - 0.15, y1, z + 0.12);
+        el('circle', { cx: led[0], cy: led[1], r: 1.8, class: 'led', style: 'fill: var(--green-3)' }, g);
+      }
+    }
+    el('polygon', { points: ptsAt(loop, h), style: `fill:${color}`, stroke: 'var(--edge)', 'stroke-width': 1.4, 'stroke-linejoin': 'round' }, g);
+    if (opts.segments) {
+      for (let i = 1; i < opts.segments; i++) {
+        const x = x0 + (w * i) / opts.segments;
+        el('polyline', { points: pts([P(x, y0, h), P(x, y1, h), P(x, y1, 0)]), fill: 'none', stroke: 'var(--edge)', 'stroke-width': 1, opacity: 0.55, 'stroke-linecap': 'round' }, g);
+      }
+    }
+    return P(0, 0, h);
+  }
+
+  // dotted ground pad that marks out each resource's spot
+  function pad(g, r, state) {
+    const k = r * 1.08;
+    el('polygon', {
+      points: pts(rrect(-k, -k, k, k, k * 0.42, 6).map(([x, y]) => P(x, y, 0))),
+      class: `pad${state === 'down' ? ' pad--down' : ''}`,
+      fill: 'none', 'stroke-width': 1.3, 'stroke-dasharray': '2.5 4.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    }, g);
+  }
+
   function box(g, w, d, h, color, opts = {}) {
+    // every block gets rounded corners unless a caller asks for { round: 0 }
+    const r = opts.round ?? Math.min(w, d) * 0.2;
+    if (r > 0) return roundBox(g, w, d, h, color, r, opts);
     const x0 = -w / 2, x1 = w / 2, y0 = -d / 2, y1 = d / 2;
     const stroke = { stroke: 'var(--edge)', 'stroke-width': 1.4, 'stroke-linejoin': 'round' };
     // shadow
@@ -71,8 +145,8 @@
   }
 
   const KINDS = {
-    users: { draw: (g) => { const t = box(g, 1.9, 1.9, 0.25, 'var(--green)'); people(g, 3); return P(0, 0, 1); }, r: 1.2 },
-    client: { draw: (g) => { box(g, 1.3, 0.9, 0.12, 'var(--card)'); const s = el('g', {}, g); el('polygon', { points: pts([P(-0.6, -0.4, 0.12), P(0.6, -0.4, 0.12), P(0.6, -0.4, 1.0), P(-0.6, -0.4, 1.0)]), style: 'fill: var(--blue)', stroke: 'var(--edge)', 'stroke-width': 1.4 }, s); return P(0, -0.4, 1.0); }, r: 0.9 },
+    users: { draw: (g) => { box(g, 1.9, 1.9, 0.25, 'var(--green)', { round: 0.5 }); people(g, 3); return P(0, 0, 1); }, r: 1.2 },
+    client: { draw: (g) => { box(g, 1.3, 0.9, 0.12, 'var(--card)'); const s = el('g', {}, g); el('polygon', { points: pts(rrect(-0.6, 0.12, 0.6, 1.0, 0.14, 5).map(([x, z]) => P(x, -0.4, z))), style: 'fill: var(--blue)', stroke: 'var(--edge)', 'stroke-width': 1.4, 'stroke-linejoin': 'round' }, s); return P(0, -0.4, 1.0); }, r: 0.9 },
     server: { draw: (g) => box(g, 1.3, 1.3, 1.7, 'var(--blue)', { slots: 3 }), r: 0.9 },
     big: { draw: (g) => box(g, 2, 2, 2.6, 'var(--blue)', { slots: 5 }), r: 1.3 },
     worker: { draw: (g) => box(g, 1.2, 1.2, 1.3, 'var(--green)', { slots: 2 }), r: 0.85 },
@@ -117,6 +191,7 @@
       this.svg = el('svg', { 'aria-hidden': 'true' }, container);
       this.gLinks = el('g', {}, this.svg);
       this.gLinkLabels = el('g', {}, this.svg);
+      this.gFx = el('g', { class: 'fx' }, this.svg); // landing dust, under the blocks
       this.gEnts = el('g', {}, this.svg);
       this.gDots = el('g', { class: 'dots' }, this.svg);
       this.gTags = el('g', {}, this.svg);
@@ -130,6 +205,7 @@
       this.pan = [0, 0]; // user pan, in diagram units
       this.snap = false; // jump straight to the view (while dragging)
       this.onZoom = null;
+      this.linkSeen = new Set();
       this.last = performance.now();
       this.onTick = null;
       requestAnimationFrame((t) => this.loop(t));
@@ -147,12 +223,12 @@
       // remove gone
       for (const [id, e] of this.ents) {
         if (!ents[id]) {
-          e.g.style.opacity = 0;
-          setTimeout(() => e.g.remove(), 400);
           this.ents.delete(id);
+          this.liftOut(e);
         }
       }
       // add / update
+      const born = [];
       for (const id in ents) {
         // lesson coords are screen-aligned (x → right, y → down); convert to iso grid
         const raw = ents[id];
@@ -161,19 +237,17 @@
         const sig = `${spec.kind}|${spec.label}|${spec.sub || ''}|${spec.state || ''}`;
         if (!e) {
           const g = el('g', { class: 'ent' }, this.gEnts);
-          g.style.transition = 'transform .7s cubic-bezier(.3,.7,.2,1), opacity .4s';
-          g.style.opacity = 0;
-          e = { id, g, sig: null, count: 0 };
+          e = { id, g, sig: null, count: 0, landAt: 0 };
           this.ents.set(id, e);
-          const [sx, sy] = P(spec.x, spec.y);
-          g.style.transform = `translate(${sx}px, ${sy - 30}px)`;
-          requestAnimationFrame(() => requestAnimationFrame(() => { g.style.opacity = 1; this.place(e); }));
-        }
+          born.push(e);
+        } else if (e.spec && e.spec.kind !== spec.kind) born.push(e); // swapped for a different service: drop the new one in
         e.spec = spec;
         if (e.sig !== sig) { this.drawEnt(e); e.sig = sig; }
         e.count = spec.count || 0;
-        if (this.ents.get(id).g.style.opacity !== '0') this.place(e);
+        this.place(e);
       }
+      // new blocks drop in from above, left to right
+      born.sort((a, b) => P(a.spec.x, a.spec.y)[0] - P(b.spec.x, b.spec.y)[0]).forEach((e, i) => this.dropIn(e, i * 75));
       // depth sort
       [...this.ents.values()].sort((a, b) => a.spec.x + a.spec.y - (b.spec.x + b.spec.y)).forEach((e) => this.gEnts.appendChild(e.g));
       this.drawLinks(scene.links || {});
@@ -293,6 +367,60 @@
       });
     }
 
+    // ---- entrance / exit motion ----
+    dropIn(e, delay) {
+      const g = e.g;
+      const done = () => (g.style.transition = 'transform .7s cubic-bezier(.3,.7,.2,1), opacity .4s');
+      if (REDUCED() || !g.animate) { e.landAt = 0; done(); return; }
+      const [sx, sy] = P(e.spec.x, e.spec.y);
+      const T = (dy, sq = 1) => `translate(${sx}px, ${sy + dy}px) scale(${2 - sq}, ${sq})`; // squash at the base
+      const D = 860, hit = 0.55;
+      const op = e.spec.state === 'dim' ? 0.35 : 1;
+      g.style.transition = 'none';
+      const a = g.animate([
+        { transform: T(-170, 1.06), opacity: 0, easing: 'cubic-bezier(.55,0,1,.45)' },
+        { transform: T(-60, 1.04), opacity: op, offset: 0.3, easing: 'cubic-bezier(.55,0,1,.45)' },
+        { transform: T(0, 0.84), opacity: op, offset: hit, easing: 'cubic-bezier(.2,.7,.4,1)' },
+        { transform: T(-13, 1.04), opacity: op, offset: 0.73, easing: 'cubic-bezier(.6,0,.8,.4)' },
+        { transform: T(0, 0.95), opacity: op, offset: 0.87, easing: 'ease-out' },
+        { transform: T(0, 1), opacity: op },
+      ], { duration: D, delay, fill: 'backwards' });
+      a.onfinish = done;
+      a.oncancel = done;
+      e.landAt = performance.now() + delay + D * hit;
+      setTimeout(() => this.dust(sx, sy, e.r || 0.9), delay + D * hit);
+    }
+    dust(sx, sy, r) {
+      if (!this.gFx.isConnected) return;
+      for (const [k, d, w] of [[1, 0, 1.8], [1.35, 70, 1.2]]) {
+        const ring = el('ellipse', { cx: sx, cy: sy, rx: r * S * 0.95 * k, ry: r * S * 0.5 * k, fill: 'none', stroke: 'var(--edge)', 'stroke-width': w }, this.gFx);
+        ring.style.transformBox = 'fill-box';
+        ring.style.transformOrigin = 'center';
+        const a = ring.animate([{ transform: 'scale(.45)', opacity: 0.45 }, { transform: 'scale(1.15)', opacity: 0 }], { duration: 520, delay: d, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'backwards' });
+        a.onfinish = () => ring.remove();
+      }
+      // a few specks kicked up sideways
+      for (let i = 0; i < 6; i++) {
+        const ang = (i / 6) * Math.PI * 2 + 0.4;
+        const dx = Math.cos(ang) * r * S * 1.25, dy = Math.sin(ang) * r * S * 0.6;
+        const p = el('circle', { cx: sx, cy: sy, r: 1.8, style: 'fill: var(--edge)' }, this.gFx);
+        const a = p.animate([{ transform: 'translate(0,0)', opacity: 0.6 }, { transform: `translate(${dx}px, ${dy - 10}px)`, opacity: 0 }], { duration: 480, easing: 'cubic-bezier(.2,.8,.3,1)' });
+        a.onfinish = () => p.remove();
+      }
+    }
+    liftOut(e) {
+      const g = e.g;
+      if (REDUCED() || !g.animate) { g.remove(); return; }
+      const [sx, sy] = P(e.spec.x, e.spec.y);
+      g.style.transition = 'none';
+      const a = g.animate([
+        { transform: `translate(${sx}px, ${sy}px) scale(1, 1)`, opacity: 1 },
+        { transform: `translate(${sx}px, ${sy + 4}px) scale(1.04, .94)`, opacity: 1, offset: 0.25 },
+        { transform: `translate(${sx}px, ${sy - 70}px) scale(.96, 1.04)`, opacity: 0 },
+      ], { duration: 420, easing: 'cubic-bezier(.5,0,.75,0)', fill: 'forwards' });
+      a.onfinish = () => g.remove();
+    }
+
     place(e) {
       const [sx, sy] = P(e.spec.x, e.spec.y);
       e.g.style.transform = `translate(${sx}px, ${sy}px)`;
@@ -303,6 +431,7 @@
       const g = e.g, spec = e.spec;
       g.innerHTML = '';
       const kind = KINDS[spec.kind] || KINDS.box;
+      if (!spec.noPad) pad(g, kind.r, spec.state);
       const body = el('g', {}, g);
       if (spec.state === 'down') body.style.filter = 'grayscale(1) opacity(.6)';
       const top = kind.draw(body) || P(0, 0, 1);
@@ -324,7 +453,11 @@
       for (const e of this.ents.values()) {
         const tags = [...(e.spec.tags || [])];
         if (this.countIds.has(e.id) || e.spec.showCount) tags.unshift({ text: `${e.count} waiting`, tone: e.count > 8 ? 'red' : e.count > 3 ? 'amber' : 'sand', live: true });
+        const tagSig = tags.filter((t) => !t.live).map((t) => `${t.text.replace(/[\d.,]+/g, '#')}:${t.tone}`).join('|');
+        const pop = tagSig !== e.tagSig && !REDUCED();
+        e.tagSig = tagSig;
         if (!tags.length) continue;
+        const wait = pop ? Math.max(0, (e.landAt || 0) - performance.now()) + 120 : 0;
         const g = el('g', {}, this.gTags);
         g.style.transition = 'transform .7s cubic-bezier(.3,.7,.2,1)';
         const [sx, sy] = P(e.spec.x, e.spec.y);
@@ -339,6 +472,11 @@
           const tx = el('text', { x: 0, y: y - 2, 'text-anchor': 'middle', class: 'tag-text', style: `fill:${fg}` }, tg);
           tx.textContent = tag.text;
           if (tag.live) e.liveTag = { tx, rect: tg.firstChild };
+          if (pop && tg.animate) {
+            tg.style.transformBox = 'fill-box';
+            tg.style.transformOrigin = 'center bottom';
+            tg.animate([{ transform: 'translateY(8px) scale(.55)', opacity: 0 }, { transform: 'translateY(-2px) scale(1.06)', opacity: 1, offset: 0.7 }, { transform: 'none', opacity: 1 }], { duration: 420, delay: wait + (tags.length - 1 - i) * 70, easing: 'cubic-bezier(.3,.7,.3,1)', fill: 'backwards' });
+          }
           y -= 23;
         }
       }
@@ -348,10 +486,16 @@
       this.gLinks.innerHTML = '';
       this.gLinkLabels.innerHTML = '';
       this.links = links;
+      const now = performance.now();
+      const seen = new Set();
       for (const id in links) {
         const l = links[id];
         const a = this.ents.get(l.from), b = this.ents.get(l.to);
         if (!a || !b) continue;
+        const key = `${l.from}>${l.to}|${l.style || 'solid'}`;
+        seen.add(key);
+        const fresh = !this.linkSeen.has(key) && !REDUCED();
+        const wait = fresh ? Math.max(0, Math.max(a.landAt || 0, b.landAt || 0) - now) + 80 : 0;
         const pa = P(a.spec.x, a.spec.y, LINK_Z), pb = P(b.spec.x, b.spec.y, LINK_Z);
         const style = l.style || 'solid';
         const attrs = { x1: pa[0], y1: pa[1], x2: pb[0], y2: pb[1], 'stroke-linecap': 'round' };
@@ -359,16 +503,28 @@
         else if (style === 'broken') Object.assign(attrs, { stroke: 'var(--red-2)', 'stroke-width': 2, 'stroke-dasharray': '6 6' });
         else if (style === 'dashed') Object.assign(attrs, { stroke: 'var(--edge)', 'stroke-width': 1.6, 'stroke-dasharray': '6 5', opacity: 0.7 });
         else Object.assign(attrs, { stroke: 'var(--edge)', 'stroke-width': 1.8, opacity: 0.55 });
-        el('line', { ...attrs, stroke: 'var(--sheet)', 'stroke-width': 7, opacity: 1, 'stroke-dasharray': '' }, this.gLinks);
-        el('line', attrs, this.gLinks);
+        const halo = el('line', { ...attrs, stroke: 'var(--sheet)', 'stroke-width': 7, opacity: 1, 'stroke-dasharray': '' }, this.gLinks);
+        const line = el('line', attrs, this.gLinks);
+        if (fresh && line.animate) {
+          // solid links draw themselves from source to target; dashed ones fade in
+          if (style === 'solid') {
+            line.setAttribute('pathLength', '1');
+            line.setAttribute('stroke-dasharray', '1');
+            line.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: 520, delay: wait, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'backwards' });
+          } else line.animate([{ opacity: 0 }, { opacity: attrs.opacity ?? 1 }], { duration: 450, delay: wait, fill: 'backwards' });
+          halo.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: wait, fill: 'backwards' });
+        }
+        const labelFrom = this.gLinkLabels.childNodes.length;
         if (l.label) {
           const mx = (pa[0] + pb[0]) / 2, my = (pa[1] + pb[1]) / 2;
           const w = l.label.length * 6 + 12;
           const tone = TONES[l.labelTone];
           el('rect', { x: mx - w / 2, y: my - 10, width: w, height: 17, rx: 5, style: `fill:${tone ? tone[0] : 'var(--sheet)'}`, stroke: 'var(--line-strong)' }, this.gLinkLabels);
           el('text', { x: mx, y: my + 3, 'text-anchor': 'middle', class: 'link-label', style: tone ? `fill:${tone[1]}` : '' }, this.gLinkLabels).textContent = l.label;
+          if (fresh) [...this.gLinkLabels.childNodes].slice(labelFrom).forEach((n) => n.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 350, delay: wait + 380, fill: 'backwards' }));
         }
       }
+      this.linkSeen = seen;
     }
 
     fit() {

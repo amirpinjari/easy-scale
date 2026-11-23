@@ -1,0 +1,18 @@
+/* Font families, shared by both skins. The Aa button in the top bar switches them. */
+/* ---------- type: three switchable families (Aa button in the top bar) ---------- */
+:root {
+  --font-sans: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Space Grotesk", "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font: var(--font-sans);
+  --font-head: var(--font-display);
+}
+:root[data-font="mono"] { --font: var(--font-mono); --font-head: var(--font-mono); }
+:root[data-font="serif"] { --font: var(--font-sans); --font-head: var(--font-serif); }
+
+body { font-family: var(--font); }
+kbd, .metric b, .qkey, .cs-table td, .bom__table td, code, pre { font-family: var(--font-mono); }
+.lesson-head .title, .page__head .title, .guide h2, .qcard h2, .qdone h2,
+.cs h3, .bom__head h3, .brand, .progress__num, .soon__hero h2 { font-family: var(--font-head); }
+#font-btn, #skin-btn { font-family: var(--font-head); font-weight: 700; font-size: 14px; min-width: 34px; }

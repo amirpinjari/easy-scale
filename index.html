@@ -18,12 +18,17 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="fonts.css" />
+    <link rel="stylesheet" href="theme.css" id="skin-css" />
     <script>
       try {
         if (localStorage.getItem('sd:theme') === 'dark') document.documentElement.dataset.theme = 'dark';
         var f = localStorage.getItem('sd:font');
         if (f === 'mono' || f === 'serif') document.documentElement.dataset.font = f;
+        // skin: premium (default) or classic — classic simply switches the premium stylesheet off
+        var k = localStorage.getItem('sd:skin') === 'classic' ? 'classic' : 'premium';
+        document.documentElement.dataset.skin = k;
+        if (k === 'classic') document.getElementById('skin-css').disabled = true;
       } catch (e) {}
     </script>
   </head>

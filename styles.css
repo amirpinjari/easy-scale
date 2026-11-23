@@ -780,3 +780,7 @@ kbd {
 .soon__table td b { color: var(--ink); }
 .soon__table tbody tr { animation: rise .45s both; }
 @media (max-width: 900px) { .soon { grid-template-columns: 1fr; padding: 20px; } }
+
+/* dotted ground pad under every resource */
+.pad { stroke: var(--line-strong); opacity: .95; }
+.pad--down { stroke: var(--red-2); opacity: .8; }

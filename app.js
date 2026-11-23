@@ -79,6 +79,7 @@
       <a class="brand" href="#/">${logo}<span class="brand__name">System <span>Design</span></span></a>
       <nav class="nav">${NAV.map(([l, i, a]) => `<button class="nav__item ${a ? 'is-active' : ''}" data-nav="${l}">${icon(i, 16)}<span>${l}</span></button>`).join('')}</nav>
       <button class="search" id="search-open" aria-label="Search the course">${icon('search', 16)}<span class="search__hint">Search lessons…</span><kbd>${isMac ? '⌘K' : 'Ctrl K'}</kbd></button>
+      <button class="icon-btn" id="skin-btn" aria-label="Switch look"></button>
       <button class="icon-btn" id="font-btn" aria-label="Change font"></button>
       <button class="icon-btn" id="theme-btn" aria-label="Toggle theme"></button>
     </header>
@@ -316,8 +317,28 @@
     store.set('theme', t);
     try { localStorage.setItem('sd:theme', t); } catch {}
     $('#theme-btn').innerHTML = icon(t === 'dark' ? 'sun' : 'moon', 17);
-    document.querySelector('meta[name=theme-color]').content = t === 'dark' ? '#0c0a14' : '#f7f5fc';
+    paintBar();
   }
+  // browser toolbar colour follows both the skin and light/dark
+  function paintBar() {
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const premium = document.documentElement.dataset.skin !== 'classic';
+    document.querySelector('meta[name=theme-color]').content = premium ? (dark ? '#0c0a14' : '#f7f5fc') : (dark ? '#211e1a' : '#f4ebe0');
+  }
+
+  // skin: Premium (gradients, glow, motion) ↔ Classic (ink borders, offset shadows, calm)
+  function setSkin(k) {
+    document.documentElement.dataset.skin = k;
+    document.getElementById('skin-css').disabled = k === 'classic';
+    try { localStorage.setItem('sd:skin', k); } catch {}
+    const b = $('#skin-btn');
+    b.innerHTML = k === 'classic' ? icon('window', 16) : icon('sparkles', 16);
+    b.title = k === 'classic' ? 'Look: Classic — click for Premium' : 'Look: Premium — click for Classic';
+    b.setAttribute('aria-label', b.title);
+    paintBar();
+  }
+  $('#skin-btn').onclick = () => setSkin(document.documentElement.dataset.skin === 'classic' ? 'premium' : 'classic');
+  setSkin(document.documentElement.dataset.skin === 'classic' ? 'classic' : 'premium');
 
   // font: sans (default) → serif headings → mono → sans
   const FONTS = [['sans', 'Aa', 'Sans'], ['serif', 'Ag', 'Serif headings'], ['mono', '{}', 'Mono']];
